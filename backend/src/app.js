@@ -22,6 +22,8 @@ const auditRoutes = require('./routes/audit')
 const reportRoutes = require('./routes/reports')
 const supplierPortalRoutes = require('./routes/supplierPortal')
 const attachmentRoutes = require('./routes/attachments')
+const signDocsRoutes = require('./routes/signDocs')
+const signExtRoutes = require('./routes/signExt')
 
 // Operations
 const purchaseRoutes = require('./routes/operations/purchase')
@@ -81,6 +83,8 @@ app.use('/api/audit', auditRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/supplier-portal', supplierPortalRoutes)
 app.use('/api/attachments', attachmentRoutes)
+app.use('/api/sign-docs', signDocsRoutes)
+app.use('/api/sign-ext', signExtRoutes)
 
 // Operations
 app.use('/api/operations/purchase', purchaseRoutes)

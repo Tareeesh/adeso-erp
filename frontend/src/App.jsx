@@ -24,6 +24,9 @@ import PurchaseEditPage from './pages/operations/PurchaseEditPage'
 import PaymentListPage from './pages/operations/PaymentListPage'
 import PaymentCreatePage from './pages/operations/PaymentCreatePage'
 import ExternalSignPage from './pages/sign/ExternalSignPage'
+import SignDocListPage from './pages/signing/SignDocListPage'
+import SignDocPreparePage from './pages/signing/SignDocPreparePage'
+import SignDocExternalPage from './pages/signing/SignDocExternalPage'
 
 // HR
 import EmployeesPage from './pages/hr/EmployeesPage'
@@ -70,6 +73,7 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/supplier-portal/:token" element={<SupplierPortalPage />} />
           <Route path="/sign/:token" element={<ExternalSignPage />} />
+          <Route path="/sign-doc/:token" element={<SignDocExternalPage />} />
 
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
@@ -90,6 +94,11 @@ export default function App() {
               <Route path="orders" element={<ProtectedRoute module="operations"><PurchaseOrderListPage /></ProtectedRoute>} />
               <Route path="payments" element={<ProtectedRoute module="operations"><PaymentListPage /></ProtectedRoute>} />
               <Route path="payments/new" element={<ProtectedRoute module="operations"><PaymentCreatePage /></ProtectedRoute>} />
+            </Route>
+
+            <Route path="signing">
+              <Route index element={<ProtectedRoute><SignDocListPage /></ProtectedRoute>} />
+              <Route path=":id" element={<ProtectedRoute><SignDocPreparePage /></ProtectedRoute>} />
             </Route>
 
             <Route path="hr">

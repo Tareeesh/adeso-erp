@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   LayoutDashboard, Briefcase, Users, Package, Archive,
-  Settings, CheckSquare, ChevronDown, ChevronRight, Building2
+  Settings, CheckSquare, ChevronDown, ChevronRight, Building2, FileSignature,
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -10,6 +10,7 @@ import clsx from 'clsx'
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'My Tasks', icon: CheckSquare, path: '/my-tasks' },
+  { label: 'Document Signing', icon: FileSignature, path: '/signing' },
   {
     label: 'Operations', icon: Briefcase, module: 'operations',
     children: [

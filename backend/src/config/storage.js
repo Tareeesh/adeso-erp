@@ -44,6 +44,17 @@ const deleteFile = async (key) => {
     .delete()
 }
 
+const downloadFile = async (key) => {
+  const blobClient = blobServiceClient.getContainerClient(CONTAINER).getBlobClient(key)
+  const dl = await blobClient.download()
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    dl.readableStreamBody.on('data', c => chunks.push(c))
+    dl.readableStreamBody.on('end', () => resolve(Buffer.concat(chunks)))
+    dl.readableStreamBody.on('error', reject)
+  })
+}
+
 const getContentType = (ext) => {
   const types = {
     '.pdf': 'application/pdf',
@@ -58,4 +69,4 @@ const getContentType = (ext) => {
   return types[ext.toLowerCase()] || 'application/octet-stream'
 }
 
-module.exports = { uploadFile, getFileUrl, deleteFile }
+module.exports = { uploadFile, getFileUrl, deleteFile, downloadFile }
