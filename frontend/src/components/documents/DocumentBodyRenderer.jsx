@@ -64,7 +64,7 @@ function fmtDateTime(d) {
 
 // ─── Purchase Requisition ────────────────────────────────────────────────────
 
-function PurchaseRequisitionView({ doc, record }) {
+function PurchaseRequisitionView({ doc, record, embedded }) {
   const items = Array.isArray(record.items) ? record.items
     : (typeof record.items === 'string' ? JSON.parse(record.items) : [])
 
@@ -76,6 +76,23 @@ function PurchaseRequisitionView({ doc, record }) {
     high: 'bg-amber-50 text-amber-700',
     urgent: 'bg-red-50 text-red-700',
   }
+
+  if (embedded) return (
+    <div>
+      <p className="text-xs font-semibold text-secondary-400 uppercase tracking-widest mb-4">Purchase Requisition</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <Field label="Requestor" value={record.requestor_name} />
+        <Field label="Department" value={record.department} />
+        <Field label="Project Code" value={record.project_code} mono />
+        <Field label="Budget Line" value={record.budget_line} mono />
+        <Field label="Required By" value={fmtDate(record.required_by)} />
+        <Field label="Currency" value={record.currency} />
+        <div><p className="text-xs text-secondary-400">Priority</p><span className={`inline-block mt-0.5 text-xs rounded-full px-2.5 py-0.5 font-medium capitalize ${priorityColors[record.priority] || 'bg-secondary-100 text-secondary-600'}`}>{record.priority || 'normal'}</span></div>
+      </div>
+      {record.justification && <div className="mb-4"><p className="text-xs text-secondary-400 mb-1">Justification</p><p className="text-sm leading-relaxed">{record.justification}</p></div>}
+      {items.length > 0 && <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-xs text-secondary-400 uppercase border-b"><th className="text-left py-2">#</th><th className="text-left py-2">Description</th><th className="text-right py-2">Qty</th><th className="text-left py-2 pl-2">Unit</th><th className="text-right py-2">Unit Price</th><th className="text-right py-2">Total</th></tr></thead><tbody className="divide-y divide-secondary-50">{items.map((item, i) => (<tr key={i}><td className="py-2 text-secondary-400 text-xs">{i+1}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{item.quantity}</td><td className="py-2 pl-2 text-xs text-secondary-500">{item.unit}</td><td className="py-2 text-right font-mono">{item.unitPrice != null ? Number(item.unitPrice).toLocaleString('en-GB',{minimumFractionDigits:2}) : '—'}</td><td className="py-2 text-right font-mono font-medium">{(Number(item.quantity||0)*Number(item.unitPrice||0)).toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr>))}</tbody><tfoot><tr className="border-t"><td colSpan={5} className="py-2 text-right text-xs font-semibold text-secondary-600 pr-2">Estimated Total</td><td className="py-2 text-right font-bold text-primary-700 font-mono">{record.currency} {total.toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr></tfoot></table></div>}
+    </div>
+  )
 
   return (
     <div className="card overflow-hidden border border-secondary-200">

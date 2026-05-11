@@ -4,12 +4,21 @@ const { asyncHandler } = require('../middleware/errorHandler')
 const { query } = require('../config/database')
 const { sendWorkflowNotification, sendExternalSignNotification } = require('../services/emailService')
 
+const TYPE_RECORD_QUERIES = {
+  purchase_requisition: `SELECT pr.*, u.first_name || ' ' || u.last_name AS requestor_name FROM purchase_requisitions pr LEFT JOIN users u ON pr.requestor_id=u.id WHERE pr.document_id=$1`,
+  travel_authorization: `SELECT ta.*, u.first_name || ' ' || u.last_name AS requestor_name FROM travel_authorizations ta LEFT JOIN users u ON ta.requestor_id=u.id WHERE ta.document_id=$1`,
+  cab_request: `SELECT cr.*, u.first_name || ' ' || u.last_name AS requestor_name FROM cab_requests cr LEFT JOIN users u ON cr.requestor_id=u.id WHERE cr.document_id=$1`,
+  rfq: `SELECT r.* FROM rfq r WHERE r.document_id=$1`,
+  purchase_order: `SELECT po.*, COALESCE(po.supplier_name, s.name) AS supplier_name_full FROM purchase_orders po LEFT JOIN suppliers s ON po.supplier_id=s.id WHERE po.document_id=$1`,
+  payment_requisition: `SELECT * FROM payment_requisitions WHERE document_id=$1`,
+}
+
 // GET /api/sign/:token — public, no auth
 router.get('/:token', asyncHandler(async (req, res) => {
   const { rows: [step] } = await query(
     `SELECT ws.id, ws.step_number, ws.step_name, ws.status, ws.external_name,
             d.id AS document_id, d.title, d.document_number, d.document_type, d.status AS doc_status,
-            d.metadata
+            d.created_at, d.metadata
      FROM workflow_steps ws
      JOIN documents d ON ws.document_id = d.id
      WHERE ws.external_token = $1`,
@@ -19,9 +28,26 @@ router.get('/:token', asyncHandler(async (req, res) => {
   if (step.status === 'completed') return res.status(400).json({ error: 'already_signed', message: 'This document has already been signed' })
   if (step.status !== 'in_progress') return res.status(400).json({ error: 'not_ready', message: 'This document is not yet ready for your signature' })
 
+  const { rows: allSteps } = await query(
+    `SELECT ws.*, u.first_name, u.last_name FROM workflow_steps ws LEFT JOIN users u ON ws.assigned_user_id=u.id WHERE ws.document_id=$1 ORDER BY ws.step_number`,
+    [step.document_id]
+  )
+
+  let record = {}
+  const sql = TYPE_RECORD_QUERIES[step.document_type]
+  if (sql) {
+    const { rows: [r] } = await query(sql, [step.document_id])
+    record = r || {}
+  }
+
   res.json({
     step: { id: step.id, stepName: step.step_name, externalName: step.external_name },
-    document: { title: step.title, documentNumber: step.document_number, documentType: step.document_type },
+    document: {
+      id: step.document_id, title: step.title, document_number: step.document_number,
+      document_type: step.document_type, status: step.doc_status,
+      created_at: step.created_at, metadata: step.metadata, steps: allSteps,
+    },
+    record,
   })
 }))
 

@@ -164,10 +164,15 @@ const getDocumentWithSteps = async (documentId, userId) => {
     [documentId]
   )
 
-  const { rows: signatures } = await query(
+  const { rows: sigRows } = await query(
     'SELECT s.*, u.first_name, u.last_name FROM signatures s JOIN users u ON s.user_id=u.id WHERE s.document_id=$1',
     [documentId]
   )
+  const signatures = sigRows
+  const stepsWithSig = steps.map(s => {
+    const sig = sigRows.find(r => r.workflow_step_id === s.id)
+    return sig ? { ...s, signature: sig } : s
+  })
 
   const { rows: attachmentRows } = await query(
     'SELECT * FROM document_attachments WHERE document_id=$1 ORDER BY created_at',
@@ -183,7 +188,7 @@ const getDocumentWithSteps = async (documentId, userId) => {
     [documentId]
   )
 
-  return { ...doc, steps, signatures, attachments, comments }
+  return { ...doc, steps: stepsWithSig, signatures, attachments, comments }
 }
 
 module.exports = { createWorkflow, submitWorkflow, processStep, getDocumentWithSteps }

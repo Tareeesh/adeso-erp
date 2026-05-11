@@ -14,6 +14,9 @@ const NAV = [
     label: 'Operations', icon: Briefcase, module: 'operations',
     children: [
       { label: 'Purchase Requests', path: '/operations/purchase' },
+      { label: 'RFQ / Quotations', path: '/operations/rfq' },
+      { label: 'Purchase Orders', path: '/operations/orders' },
+      { label: 'Payments', path: '/operations/payments' },
       { label: 'Travel Authorization', path: '/operations/travel' },
       { label: 'Cab Requests', path: '/operations/cab' },
     ]
