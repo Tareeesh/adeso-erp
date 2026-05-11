@@ -17,6 +17,13 @@ import TravelListPage from './pages/operations/TravelListPage'
 import TravelCreatePage from './pages/operations/TravelCreatePage'
 import CabListPage from './pages/operations/CabListPage'
 import CabCreatePage from './pages/operations/CabCreatePage'
+import RFQListPage from './pages/operations/RFQListPage'
+import RFQCreatePage from './pages/operations/RFQCreatePage'
+import PurchaseOrderListPage from './pages/operations/PurchaseOrderListPage'
+import PurchaseEditPage from './pages/operations/PurchaseEditPage'
+import PaymentListPage from './pages/operations/PaymentListPage'
+import PaymentCreatePage from './pages/operations/PaymentCreatePage'
+import ExternalSignPage from './pages/sign/ExternalSignPage'
 
 // HR
 import EmployeesPage from './pages/hr/EmployeesPage'
@@ -62,6 +69,7 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/supplier-portal/:token" element={<SupplierPortalPage />} />
+          <Route path="/sign/:token" element={<ExternalSignPage />} />
 
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
@@ -72,10 +80,16 @@ export default function App() {
             <Route path="operations">
               <Route path="purchase" element={<ProtectedRoute module="operations"><PurchaseListPage /></ProtectedRoute>} />
               <Route path="purchase/new" element={<ProtectedRoute module="operations"><PurchaseCreatePage /></ProtectedRoute>} />
+              <Route path="purchase/edit/:documentId" element={<ProtectedRoute module="operations"><PurchaseEditPage /></ProtectedRoute>} />
               <Route path="travel" element={<ProtectedRoute module="operations"><TravelListPage /></ProtectedRoute>} />
               <Route path="travel/new" element={<ProtectedRoute module="operations"><TravelCreatePage /></ProtectedRoute>} />
               <Route path="cab" element={<ProtectedRoute module="operations"><CabListPage /></ProtectedRoute>} />
               <Route path="cab/new" element={<ProtectedRoute module="operations"><CabCreatePage /></ProtectedRoute>} />
+              <Route path="rfq" element={<ProtectedRoute module="operations"><RFQListPage /></ProtectedRoute>} />
+              <Route path="rfq/new" element={<ProtectedRoute module="operations"><RFQCreatePage /></ProtectedRoute>} />
+              <Route path="orders" element={<ProtectedRoute module="operations"><PurchaseOrderListPage /></ProtectedRoute>} />
+              <Route path="payments" element={<ProtectedRoute module="operations"><PaymentListPage /></ProtectedRoute>} />
+              <Route path="payments/new" element={<ProtectedRoute module="operations"><PaymentCreatePage /></ProtectedRoute>} />
             </Route>
 
             <Route path="hr">

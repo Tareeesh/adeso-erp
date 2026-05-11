@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: erp_db
+      POSTGRES_USER: erp_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp_user -d erp_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://erp_user:${POSTGRES_PASSWORD}@postgres:5432/erp_db
+      # SendGrid SMTP — host/port/user are fixed for SendGrid
+      SMTP_HOST: smtp.sendgrid.net
+      SMTP_PORT: "587"
+      SMTP_SECURE: "false"
+      SMTP_USER: apikey
+      SMTP_PASS: ${SENDGRID_API_KEY}
+      # Azure Blob Storage
+      AZURE_STORAGE_ACCOUNT: ${AZURE_STORAGE_ACCOUNT}
+      AZURE_STORAGE_KEY: ${AZURE_STORAGE_KEY}
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "node migrations/run.js && node src/app.js"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    # Bind only to localhost — host nginx handles public 80/443
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

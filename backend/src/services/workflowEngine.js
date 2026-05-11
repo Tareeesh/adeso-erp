@@ -1,7 +1,8 @@
 const { query, transaction } = require('../config/database')
-const { sendWorkflowNotification } = require('./emailService')
+const { sendWorkflowNotification, sendExternalSignNotification } = require('./emailService')
 const { auditLog } = require('../middleware/audit')
 const { generateDocumentNumber } = require('../utils/documentNumber')
+const { getFileUrl } = require('../config/storage')
 
 const createWorkflow = async ({ companyId, documentType, title, createdBy, steps, ccUsers = [], collaboratingCompanies = [], metadata = {}, client }) => {
   const db = client || { query: (text, params) => query(text, params) }
@@ -17,9 +18,9 @@ const createWorkflow = async ({ companyId, documentType, title, createdBy, steps
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i]
     await db.query(
-      `INSERT INTO workflow_steps (document_id, step_number, step_name, step_type, assigned_user_id, assigned_role)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [doc.id, i + 1, step.name, step.type || 'approval', step.userId || null, step.role || null]
+      `INSERT INTO workflow_steps (document_id, step_number, step_name, step_type, assigned_user_id, assigned_role, external_name, external_email)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [doc.id, i + 1, step.name, step.type || 'approval', step.userId || null, step.role || null, step.externalName || null, step.externalEmail || null]
     )
   }
 
@@ -47,11 +48,15 @@ const submitWorkflow = async ({ documentId, userId, req }) => {
 
     auditLog({ userId, companyId: doc.company_id, action: 'DOCUMENT_SUBMITTED', entityType: 'document', entityId: documentId, req })
 
-    if (firstStep?.assigned_user_id) {
+    if (firstStep?.external_email) {
+      await sendExternalSignNotification({
+        email: firstStep.external_email, name: firstStep.external_name,
+        token: firstStep.external_token,
+        documentTitle: doc.title, documentNumber: doc.document_number, documentType: doc.document_type,
+      })
+    } else if (firstStep?.assigned_user_id) {
       await sendWorkflowNotification({
-        documentId,
-        stepId: firstStep.id,
-        recipientUserId: firstStep.assigned_user_id,
+        documentId, stepId: firstStep.id, recipientUserId: firstStep.assigned_user_id,
         type: 'workflowAction',
         data: { documentTitle: doc.title, documentNumber: doc.document_number, documentType: doc.document_type, companyId: doc.company_id, action: firstStep.step_name },
       })
@@ -106,7 +111,8 @@ const processStep = async ({ documentId, stepId, userId, action, comments, req }
       )
       const { rows: [doc] } = await client.query('SELECT * FROM documents WHERE id=$1', [documentId])
 
-      const recipients = [...new Set([...allSteps.map(s => s.assigned_user_id), doc.created_by, ...JSON.parse(doc.cc_users || '[]')])]
+      const ccList = (() => { try { return JSON.parse(doc.cc_users) || [] } catch { return [] } })()
+      const recipients = [...new Set([...allSteps.map(s => s.assigned_user_id), doc.created_by, ...ccList])]
 
       for (const recipientId of recipients) {
         if (recipientId) {
@@ -129,7 +135,13 @@ const processStep = async ({ documentId, stepId, userId, action, comments, req }
       [documentId, nextStepNumber]
     )
 
-    if (nextStep?.assigned_user_id) {
+    if (nextStep?.external_email) {
+      await sendExternalSignNotification({
+        email: nextStep.external_email, name: nextStep.external_name,
+        token: nextStep.external_token,
+        documentTitle: step.title, documentNumber: step.document_number, documentType: step.document_type,
+      })
+    } else if (nextStep?.assigned_user_id) {
       await sendWorkflowNotification({
         documentId, stepId: nextStep.id, recipientUserId: nextStep.assigned_user_id, type: 'workflowAction',
         data: { documentTitle: step.title, documentNumber: step.document_number, documentType: step.document_type, companyId: step.company_id, action: nextStep.step_name },
@@ -157,9 +169,12 @@ const getDocumentWithSteps = async (documentId, userId) => {
     [documentId]
   )
 
-  const { rows: attachments } = await query(
+  const { rows: attachmentRows } = await query(
     'SELECT * FROM document_attachments WHERE document_id=$1 ORDER BY created_at',
     [documentId]
+  )
+  const attachments = await Promise.all(
+    attachmentRows.map(async att => ({ ...att, download_url: await getFileUrl(att.file_url) }))
   )
 
   const { rows: comments } = await query(

@@ -45,6 +45,33 @@ router.get('/my-documents', authenticate, asyncHandler(async (req, res) => {
   res.json(rows)
 }))
 
+router.get('/:documentId/record', authenticate, asyncHandler(async (req, res) => {
+  const { rows: [doc] } = await query(
+    'SELECT document_type FROM documents WHERE id=$1',
+    [req.params.documentId]
+  )
+  if (!doc) return res.status(404).json({ error: 'Document not found' })
+
+  const TYPE_QUERIES = {
+    purchase_requisition: `SELECT pr.*, u.first_name || ' ' || u.last_name AS requestor_name
+      FROM purchase_requisitions pr LEFT JOIN users u ON pr.requestor_id=u.id WHERE pr.document_id=$1`,
+    travel_authorization: `SELECT ta.*, u.first_name || ' ' || u.last_name AS requestor_name
+      FROM travel_authorizations ta LEFT JOIN users u ON ta.requestor_id=u.id WHERE ta.document_id=$1`,
+    cab_request: `SELECT cr.*, u.first_name || ' ' || u.last_name AS requestor_name
+      FROM cab_requests cr LEFT JOIN users u ON cr.requestor_id=u.id WHERE cr.document_id=$1`,
+    rfq: `SELECT r.* FROM rfq r WHERE r.document_id=$1`,
+    purchase_order: `SELECT po.*, COALESCE(po.supplier_name, s.name) AS supplier_name_full,
+      s.email AS supplier_email, s.phone AS supplier_phone
+      FROM purchase_orders po LEFT JOIN suppliers s ON po.supplier_id=s.id WHERE po.document_id=$1`,
+    payment_requisition: `SELECT * FROM payment_requisitions WHERE document_id=$1`,
+  }
+
+  const sql = TYPE_QUERIES[doc.document_type]
+  if (!sql) return res.json({})
+  const { rows: [record] } = await query(sql, [req.params.documentId])
+  res.json(record || {})
+}))
+
 router.get('/:documentId', authenticate, asyncHandler(async (req, res) => {
   const doc = await getDocumentWithSteps(req.params.documentId, req.user.id)
   if (!doc) return res.status(404).json({ error: 'Document not found' })

@@ -4,6 +4,5 @@ COPY backend/package*.json ./
 RUN npm install --production
 COPY backend/src ./src
 COPY backend/migrations ./migrations
-COPY backend/seeds ./seeds
 EXPOSE 5000
 CMD ["node", "src/app.js"]

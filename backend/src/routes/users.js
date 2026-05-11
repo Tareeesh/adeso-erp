@@ -6,6 +6,11 @@ const { asyncHandler } = require('../middleware/errorHandler')
 const { query } = require('../config/database')
 const { sendEmail } = require('../config/email')
 
+router.get('/roles', authenticate, asyncHandler(async (req, res) => {
+  const { rows } = await query('SELECT id, name, display_name FROM roles ORDER BY display_name')
+  res.json(rows)
+}))
+
 router.get('/', authenticate, asyncHandler(async (req, res) => {
   const { rows } = await query(
     `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.job_title, u.is_active, u.last_login, u.created_at,
@@ -54,6 +59,24 @@ router.post('/', authenticate, requireRole('company_admin', 'global_admin'), asy
   })
 
   res.status(201).json({ user, membership: uc })
+}))
+
+router.put('/:id', authenticate, requireRole('company_admin', 'global_admin'), asyncHandler(async (req, res) => {
+  const { firstName, lastName, jobTitle, roleId } = req.body
+  const { rows: [user] } = await query(
+    `UPDATE users SET first_name=COALESCE($1,first_name), last_name=COALESCE($2,last_name),
+     job_title=COALESCE($3,job_title) WHERE id=$4 RETURNING id,email,first_name,last_name,job_title`,
+    [firstName || null, lastName || null, jobTitle || null, req.params.id]
+  )
+  if (!user) return res.status(404).json({ error: 'User not found' })
+
+  if (roleId) {
+    await query(
+      `UPDATE user_companies SET role_id=$1 WHERE user_id=$2 AND company_id=$3`,
+      [roleId, req.params.id, req.user.companyId]
+    )
+  }
+  res.json(user)
 }))
 
 router.get('/:id', authenticate, asyncHandler(async (req, res) => {

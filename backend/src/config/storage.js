@@ -1,40 +1,47 @@
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3')
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
+const { BlobServiceClient, StorageSharedKeyCredential, BlobSASPermissions } = require('@azure/storage-blob')
 const { v4: uuidv4 } = require('uuid')
 const path = require('path')
 
-const s3Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-})
-
-const BUCKET = process.env.R2_BUCKET_NAME
+const credential = new StorageSharedKeyCredential(
+  process.env.AZURE_STORAGE_ACCOUNT,
+  process.env.AZURE_STORAGE_KEY
+)
+const blobServiceClient = new BlobServiceClient(
+  `https://${process.env.AZURE_STORAGE_ACCOUNT}.blob.core.windows.net`,
+  credential
+)
+const CONTAINER = process.env.AZURE_STORAGE_CONTAINER || 'erp-documents'
 
 const uploadFile = async (buffer, originalName, folder = 'documents') => {
   const ext = path.extname(originalName)
   const key = `${folder}/${uuidv4()}${ext}`
+  const blockBlobClient = blobServiceClient
+    .getContainerClient(CONTAINER)
+    .getBlockBlobClient(key)
 
-  await s3Client.send(new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: getContentType(ext),
-  }))
+  await blockBlobClient.upload(buffer, buffer.length, {
+    blobHTTPHeaders: { blobContentType: getContentType(ext) },
+  })
 
   return key
 }
 
 const getFileUrl = async (key, expiresIn = 3600) => {
-  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
-  return getSignedUrl(s3Client, command, { expiresIn })
+  const blobClient = blobServiceClient
+    .getContainerClient(CONTAINER)
+    .getBlobClient(key)
+
+  return blobClient.generateSasUrl({
+    permissions: BlobSASPermissions.parse('r'),
+    expiresOn: new Date(Date.now() + expiresIn * 1000),
+  })
 }
 
 const deleteFile = async (key) => {
-  await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
+  await blobServiceClient
+    .getContainerClient(CONTAINER)
+    .getBlockBlobClient(key)
+    .delete()
 }
 
 const getContentType = (ext) => {

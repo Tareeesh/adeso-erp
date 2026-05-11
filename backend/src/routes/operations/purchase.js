@@ -32,7 +32,9 @@ router.post('/requisitions', ...guard, asyncHandler(async (req, res) => {
     const doc = await createWorkflow({
       companyId: req.user.companyId, documentType: 'purchase_requisition',
       title: title || 'Purchase Requisition', createdBy: req.user.id,
-      steps, ccUsers, collaboratingCompanies, client,
+      steps, ccUsers, collaboratingCompanies,
+      metadata: { estimatedTotal, currency: currency || 'KES', department, budgetLine },
+      client,
     })
 
     const { rows: [pr] } = await client.query(
@@ -46,6 +48,50 @@ router.post('/requisitions', ...guard, asyncHandler(async (req, res) => {
 
   auditLog({ userId: req.user.id, companyId: req.user.companyId, action: 'CREATE_PR', entityType: 'purchase_requisition', entityId: result.requisition.id, req })
   res.status(201).json(result)
+}))
+
+router.get('/requisitions/by-document/:documentId', ...guard, asyncHandler(async (req, res) => {
+  const { rows: [pr] } = await query(
+    `SELECT pr.*, d.status AS doc_status, d.created_by AS doc_created_by
+     FROM purchase_requisitions pr
+     JOIN documents d ON pr.document_id=d.id
+     WHERE pr.document_id=$1 AND pr.company_id=$2`,
+    [req.params.documentId, req.user.companyId]
+  )
+  if (!pr) return res.status(404).json({ error: 'Not found' })
+  res.json(pr)
+}))
+
+router.put('/requisitions/:prId', ...guard, asyncHandler(async (req, res) => {
+  const { department, projectCode, budgetLine, requiredBy, priority, justification, currency, estimatedTotal, items } = req.body
+
+  const { rows: [pr] } = await query(
+    `SELECT pr.*, d.status AS doc_status
+     FROM purchase_requisitions pr
+     JOIN documents d ON pr.document_id=d.id
+     WHERE pr.id=$1 AND pr.company_id=$2`,
+    [req.params.prId, req.user.companyId]
+  )
+  if (!pr) return res.status(404).json({ error: 'Not found' })
+  if (pr.doc_status !== 'draft') return res.status(400).json({ error: 'Only draft requisitions can be edited' })
+
+  await transaction(async (client) => {
+    await client.query(
+      `UPDATE purchase_requisitions
+       SET department=$1, project_code=$2, budget_line=$3, required_by=$4, priority=$5,
+           justification=$6, currency=$7, estimated_total=$8, items=$9
+       WHERE id=$10`,
+      [department, projectCode, budgetLine, requiredBy || null, priority || 'normal', justification, currency || 'KES', estimatedTotal, JSON.stringify(items || []), req.params.prId]
+    )
+    await client.query(
+      `UPDATE documents SET metadata=$1 WHERE id=$2`,
+      [JSON.stringify({ estimatedTotal, currency: currency || 'KES', department, budgetLine }), pr.document_id]
+    )
+  })
+
+  auditLog({ userId: req.user.id, companyId: req.user.companyId, action: 'UPDATE_PR', entityType: 'purchase_requisition', entityId: req.params.prId, req })
+  const { rows: [updated] } = await query('SELECT * FROM purchase_requisitions WHERE id=$1', [req.params.prId])
+  res.json(updated)
 }))
 
 router.get('/requisitions/:id', ...guard, asyncHandler(async (req, res) => {
@@ -188,20 +234,75 @@ router.post('/orders/:orderId/delivery', ...guard, asyncHandler(async (req, res)
 
 // ---- PAYMENT REQUISITIONS ----
 
+router.get('/payments', ...guard, asyncHandler(async (req, res) => {
+  const { rows } = await query(
+    `SELECT pr.*, d.document_number, d.status, d.created_at, d.title,
+            u.first_name || ' ' || u.last_name AS requestor_name
+     FROM payment_requisitions pr
+     JOIN documents d ON pr.document_id = d.id
+     JOIN users u ON pr.created_by = u.id
+     WHERE pr.company_id=$1 AND d.status != 'deleted'
+     ORDER BY d.created_at DESC`,
+    [req.user.companyId]
+  )
+  res.json(rows)
+}))
+
+router.get('/payments/by-document/:documentId', ...guard, asyncHandler(async (req, res) => {
+  const { rows: [pr] } = await query(
+    `SELECT pr.*, d.document_number, d.status, d.created_at
+     FROM payment_requisitions pr
+     JOIN documents d ON pr.document_id = d.id
+     WHERE pr.document_id=$1 AND pr.company_id=$2`,
+    [req.params.documentId, req.user.companyId]
+  )
+  if (!pr) return res.status(404).json({ error: 'Not found' })
+  res.json(pr)
+}))
+
+router.get('/orders/:orderId', ...guard, asyncHandler(async (req, res) => {
+  const { rows: [po] } = await query(
+    `SELECT po.*, d.document_number, d.status, s.name AS supplier_name_resolved,
+            s.bank_details, s.email AS supplier_email
+     FROM purchase_orders po
+     JOIN documents d ON po.document_id = d.id
+     LEFT JOIN suppliers s ON po.supplier_id = s.id
+     WHERE po.id=$1 AND po.company_id=$2`,
+    [req.params.orderId, req.user.companyId]
+  )
+  if (!po) return res.status(404).json({ error: 'Not found' })
+  res.json(po)
+}))
+
 router.post('/payments', ...guard, asyncHandler(async (req, res) => {
   const { poId, payeeName, payeeAccount, payeeBank, currency, amount, paymentMethod, paymentPurpose, budgetLine, steps, ccUsers } = req.body
+
+  let poReference = null
+  if (poId) {
+    const { rows: [po] } = await query(
+      'SELECT d.document_number FROM purchase_orders po JOIN documents d ON po.document_id=d.id WHERE po.id=$1',
+      [poId]
+    )
+    poReference = po?.document_number || null
+  }
 
   const result = await transaction(async (client) => {
     const doc = await createWorkflow({
       companyId: req.user.companyId, documentType: 'payment_requisition',
       title: `Payment Requisition — ${payeeName}`, createdBy: req.user.id,
       steps, ccUsers, client,
+      metadata: {
+        payeeName, payeeAccount, payeeBank,
+        currency: currency || 'KES', amount,
+        paymentMethod, paymentPurpose, budgetLine,
+        poReference,
+      },
     })
 
     const { rows: [pmtReq] } = await client.query(
       `INSERT INTO payment_requisitions (document_id, po_id, company_id, created_by, payee_name, payee_account, payee_bank, currency, amount, payment_method, payment_purpose, budget_line)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [doc.id, poId, req.user.companyId, req.user.id, payeeName, payeeAccount, payeeBank, currency || 'KES', amount, paymentMethod, paymentPurpose, budgetLine]
+      [doc.id, poId || null, req.user.companyId, req.user.id, payeeName, payeeAccount, payeeBank, currency || 'KES', amount, paymentMethod, paymentPurpose, budgetLine]
     )
 
     return { document: doc, paymentRequisition: pmtReq }

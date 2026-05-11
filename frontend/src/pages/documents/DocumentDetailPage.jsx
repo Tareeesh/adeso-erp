@@ -5,8 +5,11 @@ import api from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 import WorkflowTracker from '../../components/common/WorkflowTracker'
 import SignatureModal from '../../components/signatures/SignatureModal'
+import DocumentBodyRenderer from '../../components/documents/DocumentBodyRenderer'
 import { toast } from 'react-toastify'
-import { FileText, Download, CheckCircle, XCircle, Paperclip, MessageSquare } from 'lucide-react'
+import { FileText, Download, Upload, CheckCircle, XCircle, Paperclip, MessageSquare, ArrowRight, FileSearch, ShoppingCart, Edit2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { getProcurementTier, getTierColorClass } from '../../utils/procurementThresholds'
 
 const statusBadge = (status) => {
   const map = { draft: 'badge-draft', pending: 'badge-pending', in_progress: 'badge-progress', completed: 'badge-completed', rejected: 'badge-rejected', approved: 'badge-approved' }
@@ -22,10 +25,33 @@ export default function DocumentDetailPage() {
   const [comment, setComment] = useState('')
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectBox, setShowRejectBox] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  const uploadAttachment = async (file) => {
+    if (!file) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      await api.post(`/workflows/${id}/attachments`, fd)
+      toast.success('File attached')
+      qc.invalidateQueries(['document', id])
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const { data: doc, isLoading } = useQuery({
     queryKey: ['document', id],
     queryFn: () => api.get(`/workflows/${id}`).then(r => r.data),
+  })
+
+  const { data: record } = useQuery({
+    queryKey: ['document-record', id],
+    queryFn: () => api.get(`/workflows/${id}/record`).then(r => r.data),
+    enabled: !!id && !!doc,
   })
 
   const myStep = doc?.steps?.find(s => s.assigned_user_id === user?.id && s.status === 'in_progress')
@@ -102,9 +128,16 @@ export default function DocumentDetailPage() {
         {/* Actions */}
         <div className="mt-4 flex gap-3 flex-wrap">
           {doc.status === 'draft' && doc.created_by === user?.id && (
-            <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending} className="btn-primary text-sm">
-              Submit for Approval
-            </button>
+            <>
+              {doc.document_type === 'purchase_requisition' && (
+                <Link to={`/operations/purchase/edit/${doc.id}`} className="btn-secondary text-sm flex items-center gap-2">
+                  <Edit2 size={14} />Edit Draft
+                </Link>
+              )}
+              <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending} className="btn-primary text-sm">
+                Submit for Approval
+              </button>
+            </>
           )}
 
           {myStep && myStep.step_type === 'signature' && (
@@ -143,20 +176,86 @@ export default function DocumentDetailPage() {
         )}
       </div>
 
-      {/* Attachments */}
-      {doc.attachments?.length > 0 && (
-        <div className="card p-4">
-          <h3 className="font-medium text-secondary-900 mb-3 flex items-center gap-2"><Paperclip size={16} />Attachments ({doc.attachments.length})</h3>
-          <div className="space-y-2">
-            {doc.attachments.map(att => (
-              <div key={att.id} className="flex items-center justify-between p-2 bg-secondary-50 rounded-lg">
-                <span className="text-sm text-secondary-700">{att.file_name}</span>
-                <span className="text-xs text-secondary-400">{new Date(att.created_at).toLocaleDateString('en-GB')}</span>
-              </div>
-            ))}
+      {/* Document body — formatted view for all document types */}
+      {record !== undefined && <DocumentBodyRenderer doc={doc} record={record} />}
+
+      {/* Procurement next steps — shown when a PR is completed */}
+      {doc.document_type === 'purchase_requisition' && doc.status === 'completed' && (() => {
+        const amount = doc.metadata?.estimatedTotal || doc.metadata?.estimated_total || 0
+        const currency = doc.metadata?.currency || 'KES'
+        const tier = getProcurementTier(Number(amount), currency)
+        return (
+          <div className={`rounded-xl border p-5 space-y-4 ${getTierColorClass(tier.color)}`}>
+            <div>
+              <h3 className="font-semibold text-sm">Procurement Next Steps — {tier.label}</h3>
+              {tier.solicitation !== 'Not required' && (
+                <p className="text-xs mt-1 opacity-80">{tier.solicitation}</p>
+              )}
+              {tier.committee && (
+                <p className="text-xs mt-0.5 opacity-80">Procurement Committee: minimum {tier.committee.members} members required</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {tier.tier >= 2 && (
+                <Link to={`/operations/rfq/new?prId=${doc.id}`} className="flex items-center gap-1.5 bg-white bg-opacity-70 hover:bg-opacity-90 rounded-lg px-3 py-2 text-sm font-medium transition-colors">
+                  <FileSearch size={14} /> Create RFQ <ArrowRight size={12} />
+                </Link>
+              )}
+              {tier.tier >= 2 && (
+                <Link to="/operations/orders" className="flex items-center gap-1.5 bg-white bg-opacity-70 hover:bg-opacity-90 rounded-lg px-3 py-2 text-sm font-medium transition-colors">
+                  <ShoppingCart size={14} /> View Purchase Orders <ArrowRight size={12} />
+                </Link>
+              )}
+              {tier.tier < 2 && (
+                <span className="text-sm opacity-75">No formal solicitation required. Attach receipt to close this requisition.</span>
+              )}
+            </div>
           </div>
+        )
+      })()}
+
+      {/* Attachments */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium text-secondary-900 flex items-center gap-2">
+            <Paperclip size={16} />
+            Attachments{doc.attachments?.length > 0 ? ` (${doc.attachments.length})` : ''}
+          </h3>
+          <label className={`btn-secondary text-sm flex items-center gap-1.5 cursor-pointer ${uploading ? 'opacity-60 pointer-events-none' : ''}`}>
+            <Upload size={13} />
+            {uploading ? 'Uploading…' : 'Attach File'}
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.doc,.docx"
+              disabled={uploading}
+              onChange={e => { uploadAttachment(e.target.files?.[0]); e.target.value = '' }}
+            />
+          </label>
         </div>
-      )}
+        {(!doc.attachments || doc.attachments.length === 0) && (
+          <p className="text-sm text-secondary-400">No attachments yet. Attach a PDF or Word document.</p>
+        )}
+        <div className="space-y-2">
+          {doc.attachments?.map(att => (
+            <div key={att.id} className="flex items-center justify-between p-2 bg-secondary-50 rounded-lg">
+              <span className="text-sm text-secondary-700 flex items-center gap-2">
+                <FileText size={13} className="text-secondary-400 flex-shrink-0" />
+                {att.file_name}
+              </span>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <span className="text-xs text-secondary-400">{new Date(att.created_at).toLocaleDateString('en-GB')}</span>
+                {att.download_url && (
+                  <a href={att.download_url} target="_blank" rel="noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                    <Download size={12} />Download
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-secondary-400 mt-3">PDF and Word documents only · Max 50 MB</p>
+      </div>
 
       {/* Comments */}
       <div className="card p-4">

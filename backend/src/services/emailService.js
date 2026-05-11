@@ -140,6 +140,35 @@ const templates = {
   }),
 }
 
+const sendExternalSignNotification = async ({ email, name, token, documentTitle, documentNumber, documentType }) => {
+  const signUrl = `${process.env.APP_URL}/sign/${token}`
+  await sendEmail({
+    to: email,
+    subject: `Signature Request: ${documentType?.replace(/_/g, ' ')} #${documentNumber}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1d4ed8;padding:20px;border-radius:8px 8px 0 0;">
+          <h2 style="color:white;margin:0;">Signature Request</h2>
+        </div>
+        <div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;">
+          <p>Hello <strong>${name || email}</strong>,</p>
+          <p>You have been requested to review and sign the following document:</p>
+          <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:16px;margin:16px 0;">
+            <p style="margin:4px 0;"><strong>Document:</strong> ${documentTitle}</p>
+            <p style="margin:4px 0;"><strong>Reference:</strong> ${documentNumber}</p>
+          </div>
+          <p>Click the button below to view and sign the document. No account is required.</p>
+          <a href="${signUrl}" style="display:inline-block;background:#1d4ed8;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin:8px 0;">
+            Review &amp; Sign Document
+          </a>
+          <p style="color:#64748b;font-size:12px;margin-top:24px;">
+            This link is unique to you. Do not share it. Sent by ${process.env.APP_NAME || 'ADESO ERP'}.
+          </p>
+        </div>
+      </div>`,
+  })
+}
+
 const sendWorkflowNotification = async ({ documentId, stepId, recipientUserId, type, data }) => {
   const { rows } = await query(
     'SELECT email, first_name, last_name FROM users WHERE id=$1',
@@ -160,4 +189,4 @@ const sendWorkflowNotification = async ({ documentId, stepId, recipientUserId, t
   )
 }
 
-module.exports = { sendWorkflowNotification, templates }
+module.exports = { sendWorkflowNotification, sendExternalSignNotification, templates }

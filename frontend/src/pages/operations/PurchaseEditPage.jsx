@@ -1,28 +1,45 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
 import { Plus, Trash2 } from 'lucide-react'
-import ApprovalChainBuilder from '../../components/shared/ApprovalChainBuilder'
 import ProcurementTierBadge from '../../components/shared/ProcurementTierBadge'
 
-export default function PurchaseCreatePage() {
+export default function PurchaseEditPage() {
+  const { documentId } = useParams()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ department: '', projectCode: '', budgetLine: '', requiredBy: '', priority: 'normal', justification: '', currency: 'KES', items: [{ description: '', quantity: 1, unitPrice: 0, unit: '' }] })
-  const [steps, setSteps] = useState([{ stepName: 'Line Manager Approval', type: 'internal', userId: '', externalName: '', externalEmail: '' }, { stepName: 'Finance Approval', type: 'internal', userId: '', externalName: '', externalEmail: '' }])
+  const [form, setForm] = useState(null)
 
-  const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/users').then(r => r.data) })
+  const { data: pr, isLoading } = useQuery({
+    queryKey: ['pr-by-document', documentId],
+    queryFn: () => api.get(`/operations/purchase/requisitions/by-document/${documentId}`).then(r => r.data),
+  })
 
-  const mutation = useMutation({
-    mutationFn: ({ payload, submitAfterSave }) =>
-      api.post('/operations/purchase/requisitions', payload).then(async r => {
-        if (submitAfterSave) await api.post(`/workflows/${r.data.document.id}/submit`)
-        return r
+  useEffect(() => {
+    if (!pr) return
+    const items = Array.isArray(pr.items) ? pr.items
+      : (typeof pr.items === 'string' ? JSON.parse(pr.items) : [{ description: '', quantity: 1, unitPrice: 0, unit: '' }])
+    setForm({
+      department: pr.department || '',
+      projectCode: pr.project_code || '',
+      budgetLine: pr.budget_line || '',
+      requiredBy: pr.required_by ? pr.required_by.slice(0, 10) : '',
+      priority: pr.priority || 'normal',
+      justification: pr.justification || '',
+      currency: pr.currency || 'KES',
+      items: items.length ? items : [{ description: '', quantity: 1, unitPrice: 0, unit: '' }],
+    })
+  }, [pr])
+
+  const saveMutation = useMutation({
+    mutationFn: ({ submitAfterSave }) =>
+      api.put(`/operations/purchase/requisitions/${pr.id}`, { ...form, estimatedTotal: total }).then(async () => {
+        if (submitAfterSave) await api.post(`/workflows/${documentId}/submit`)
       }),
-    onSuccess: ({ data }, { submitAfterSave }) => {
+    onSuccess: (_, { submitAfterSave }) => {
       toast.success(submitAfterSave ? 'Requisition submitted for approval' : 'Draft saved')
-      navigate(`/documents/${data.document.id}`)
+      navigate(`/documents/${documentId}`)
     },
     onError: err => toast.error(err.response?.data?.error || 'Failed to save'),
   })
@@ -31,26 +48,19 @@ export default function PurchaseCreatePage() {
   const removeItem = (i) => setForm(p => ({ ...p, items: p.items.filter((_, idx) => idx !== i) }))
   const updateItem = (i, field, val) => setForm(p => ({ ...p, items: p.items.map((item, idx) => idx === i ? { ...item, [field]: val } : item) }))
 
+  if (isLoading || !form) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>
+  if (pr?.doc_status !== 'draft') return <div className="card p-8 text-center text-secondary-500">Only draft requisitions can be edited.</div>
+
   const total = form.items.reduce((s, i) => s + (Number(i.quantity) * Number(i.unitPrice)), 0)
-
-  const buildPayload = () => {
-    const mappedSteps = steps
-      .filter(s => (s.type === 'internal' && s.userId) || (s.type === 'external' && s.externalEmail))
-      .map(s => ({
-        name: s.stepName || 'Approval',
-        type: 'approval',
-        ...(s.type === 'internal' ? { userId: s.userId } : { externalName: s.externalName, externalEmail: s.externalEmail }),
-      }))
-    return { ...form, estimatedTotal: total, steps: mappedSteps }
-  }
-
-  const handleSaveDraft = (e) => { e.preventDefault(); mutation.mutate({ payload: buildPayload(), submitAfterSave: false }) }
-  const handleSubmit = (e) => { e.preventDefault(); mutation.mutate({ payload: buildPayload(), submitAfterSave: true }) }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-secondary-900">New Purchase Requisition</h1>
-      <form className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-secondary-900">Edit Purchase Requisition</h1>
+        <p className="text-sm text-secondary-500 mt-1">This requisition is a draft. Your changes will not be sent for approval until you click Submit.</p>
+      </div>
+
+      <div className="space-y-6">
         <div className="card p-6 space-y-4">
           <h2 className="font-semibold text-secondary-900">Request Details</h2>
           <div className="grid md:grid-cols-2 gap-4">
@@ -96,18 +106,16 @@ export default function PurchaseCreatePage() {
           {total > 0 && <ProcurementTierBadge amount={total} currency={form.currency} />}
         </div>
 
-        <ApprovalChainBuilder steps={steps} onChange={setSteps} users={users} />
-
         <div className="flex gap-3 justify-end">
-          <button type="button" onClick={() => navigate(-1)} className="btn-secondary">Cancel</button>
-          <button type="button" onClick={handleSaveDraft} disabled={mutation.isPending} className="btn-secondary">
-            {mutation.isPending ? 'Saving…' : 'Save as Draft'}
+          <button type="button" onClick={() => navigate(`/documents/${documentId}`)} className="btn-secondary">Cancel</button>
+          <button type="button" onClick={() => saveMutation.mutate({ submitAfterSave: false })} disabled={saveMutation.isPending} className="btn-secondary">
+            {saveMutation.isPending ? 'Saving…' : 'Save as Draft'}
           </button>
-          <button type="button" onClick={handleSubmit} disabled={mutation.isPending} className="btn-primary">
-            {mutation.isPending ? 'Saving…' : 'Submit for Approval'}
+          <button type="button" onClick={() => saveMutation.mutate({ submitAfterSave: true })} disabled={saveMutation.isPending || !form.justification} className="btn-primary">
+            {saveMutation.isPending ? 'Saving…' : 'Submit for Approval'}
           </button>
         </div>
-      </form>
+      </div>
     </div>
   )
 }

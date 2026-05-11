@@ -22,9 +22,9 @@ router.get('/', ...guard, asyncHandler(async (req, res) => {
 }))
 
 router.post('/', ...guard, asyncHandler(async (req, res) => {
-  const { pickupLocation, dropoffLocation, pickupDatetime, returnDatetime, purpose, passengers, passengerNames, specialRequirements, lineManagerId, operationsUserId } = req.body
+  const { pickupLocation, dropoffLocation, pickupDatetime, returnDatetime, purpose, passengers, passengerNames, specialRequirements, lineManagerId, operationsUserId, steps: customSteps } = req.body
 
-  const steps = [
+  const steps = (customSteps && customSteps.length > 0) ? customSteps : [
     { name: 'Line Manager Approval', type: 'approval', userId: lineManagerId },
     { name: 'Operations/Logistics Approval', type: 'approval', userId: operationsUserId },
   ].filter(s => s.userId)

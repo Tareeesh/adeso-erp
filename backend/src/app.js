@@ -16,10 +16,12 @@ const companyRoutes = require('./routes/companies')
 const moduleRoutes = require('./routes/modules')
 const workflowRoutes = require('./routes/workflows')
 const signatureRoutes = require('./routes/signatures')
+const externalSignRoutes = require('./routes/sign')
 const notificationRoutes = require('./routes/notifications')
 const auditRoutes = require('./routes/audit')
 const reportRoutes = require('./routes/reports')
 const supplierPortalRoutes = require('./routes/supplierPortal')
+const attachmentRoutes = require('./routes/attachments')
 
 // Operations
 const purchaseRoutes = require('./routes/operations/purchase')
@@ -42,6 +44,7 @@ const warehouseRoutes = require('./routes/inventory/warehouses')
 
 const app = express()
 
+app.set('trust proxy', 1)
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors({
   origin: process.env.APP_URL || 'http://localhost:3000',
@@ -72,10 +75,12 @@ app.use('/api/companies', companyRoutes)
 app.use('/api/modules', moduleRoutes)
 app.use('/api/workflows', workflowRoutes)
 app.use('/api/signatures', signatureRoutes)
+app.use('/api/sign', externalSignRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/audit', auditRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/supplier-portal', supplierPortalRoutes)
+app.use('/api/attachments', attachmentRoutes)
 
 // Operations
 app.use('/api/operations/purchase', purchaseRoutes)

@@ -70,7 +70,7 @@ INSERT INTO users (
   job_title, is_global_admin, timezone
 ) VALUES (
   'thussein@adesoafrica.org',
-  '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGX4Q5v.ZJMq1bPdJcTxP8VY.eG',
+  '$2a$12$pA.kMuS2PpURlA9KS6P1Bum73tcqXa1TKfWF2Kte8VOhxcivauwuS',
   'Tarish', 'Hussein',
   'Global Administrator', true, 'Africa/Nairobi'
 );
