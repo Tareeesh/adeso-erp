@@ -168,11 +168,22 @@ const getDocumentWithSteps = async (documentId, userId) => {
     'SELECT s.*, u.first_name, u.last_name FROM signatures s JOIN users u ON s.user_id=u.id WHERE s.document_id=$1',
     [documentId]
   )
-  const signatures = sigRows
-  const stepsWithSig = steps.map(s => {
-    const sig = sigRows.find(r => r.workflow_step_id === s.id)
+
+  const isKey = (v) => v && !v.startsWith('http')
+  const signatures = await Promise.all(sigRows.map(async sig => {
+    if (sig.signature_type !== 'typed' && isKey(sig.signature_data)) {
+      try { sig = { ...sig, signature_data: await getFileUrl(sig.signature_data) } } catch {}
+    }
+    return sig
+  }))
+
+  const stepsWithSig = await Promise.all(steps.map(async s => {
+    if (isKey(s.signature_url)) {
+      try { s = { ...s, signature_url: await getFileUrl(s.signature_url) } } catch {}
+    }
+    const sig = signatures.find(r => r.workflow_step_id === s.id)
     return sig ? { ...s, signature: sig } : s
-  })
+  }))
 
   const { rows: attachmentRows } = await query(
     'SELECT * FROM document_attachments WHERE document_id=$1 ORDER BY created_at',

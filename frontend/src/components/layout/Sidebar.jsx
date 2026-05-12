@@ -18,6 +18,9 @@ const NAV = [
       { label: 'RFQ / Quotations', path: '/operations/rfq' },
       { label: 'Purchase Orders', path: '/operations/orders' },
       { label: 'Payments', path: '/operations/payments' },
+      { label: 'Bid Analysis', path: '/operations/bid-analysis' },
+      { label: 'Delivery & GRN', path: '/operations/delivery' },
+      { label: 'Dossier Closure', path: '/operations/dossier' },
       { label: 'Travel Authorization', path: '/operations/travel' },
       { label: 'Cab Requests', path: '/operations/cab' },
     ]

@@ -3,8 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
-import { useAuth } from '../../context/AuthContext'
-import { CreditCard, Lock, Users } from 'lucide-react'
+import { CreditCard, Users } from 'lucide-react'
 
 const PAYMENT_METHODS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
@@ -16,14 +15,36 @@ const PAYMENT_METHODS = [
 
 const CURRENCIES = ['KES', 'USD', 'EUR', 'GBP', 'UGX', 'ETB', 'SOS']
 
+const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+  'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
+const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+
+function numWords(n) {
+  if (n === 0) return 'Zero'
+  if (n < 20) return ones[n]
+  if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '')
+  if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' and ' + numWords(n % 100) : '')
+  if (n < 1000000) return numWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numWords(n % 1000) : '')
+  if (n < 1000000000) return numWords(Math.floor(n / 1000000)) + ' Million' + (n % 1000000 ? ' ' + numWords(n % 1000000) : '')
+  return numWords(Math.floor(n / 1000000000)) + ' Billion' + (n % 1000000000 ? ' ' + numWords(n % 1000000000) : '')
+}
+
+function toAmountInWords(amount, currency) {
+  if (!amount || isNaN(Number(amount))) return ''
+  const [intPart, decPart] = Number(amount).toFixed(2).split('.')
+  const cents = parseInt(decPart)
+  const words = numWords(parseInt(intPart))
+  return `${currency} ${words}${cents > 0 ? ` and ${numWords(cents)}/100` : ' Only'}`
+}
+
 export default function PaymentCreatePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user } = useAuth()
   const poId = searchParams.get('poId')
 
   const [form, setForm] = useState({
     payeeName: '',
+    payingOffice: '',
     payeeAccount: '',
     payeeBank: '',
     currency: 'KES',
@@ -31,7 +52,11 @@ export default function PaymentCreatePage() {
     paymentMethod: 'bank_transfer',
     paymentPurpose: '',
     budgetLine: '',
+    budgetCode: '',
+    projectCode: '',
   })
+  const [amountInWords, setAmountInWords] = useState('')
+  const [procurementOfficerId, setProcurementOfficerId] = useState('')
   const [budgetHolderId, setBudgetHolderId] = useState('')
   const [financeId, setFinanceId] = useState('')
   const [ccUsers, setCcUsers] = useState([])
@@ -51,10 +76,16 @@ export default function PaymentCreatePage() {
     if (poData) {
       setForm(p => ({
         ...p,
-        payeeName: p.payeeName || poData.supplier_name || poData.supplier_name_resolved || '',
+        payeeName: p.payeeName || poData.supplier_name || '',
+        currency: p.currency || poData.currency || 'KES',
+        amount: p.amount || poData.total_amount || '',
       }))
     }
   }, [poData])
+
+  useEffect(() => {
+    setAmountInWords(toAmountInWords(form.amount, form.currency))
+  }, [form.amount, form.currency])
 
   const mutation = useMutation({
     mutationFn: (data) => api.post('/operations/purchase/payments', data),
@@ -65,19 +96,19 @@ export default function PaymentCreatePage() {
     onError: err => toast.error(err.response?.data?.error || 'Failed to create'),
   })
 
-  const setField = (field, val) => setForm(p => ({ ...p, [field]: val }))
-
-  const toggleCc = (userId) => {
-    setCcUsers(p => p.includes(userId) ? p.filter(id => id !== userId) : [...p, userId])
-  }
+  const set = (field, val) => setForm(p => ({ ...p, [field]: val }))
+  const toggleCc = (id) => setCcUsers(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!budgetHolderId) return toast.error('Please select a Budget Holder')
-    if (!financeId) return toast.error('Please select a Finance Officer')
+    if (!form.payeeName.trim()) return toast.error('Payee name is required')
+    if (!form.amount || isNaN(Number(form.amount))) return toast.error('Enter a valid amount')
+    if (!procurementOfficerId) return toast.error('Select a Procurement Officer')
+    if (!budgetHolderId) return toast.error('Select a Budget Holder')
+    if (!financeId) return toast.error('Select a Finance Officer')
 
     const steps = [
-      { name: 'Requestor', type: 'approval', userId: user.id },
+      { name: 'Procurement Officer', type: 'approval', userId: procurementOfficerId },
       { name: 'Budget Holder Approval', type: 'approval', userId: budgetHolderId },
       { name: 'Finance Approval', type: 'approval', userId: financeId },
     ]
@@ -85,181 +116,193 @@ export default function PaymentCreatePage() {
     mutation.mutate({
       ...form,
       amount: Number(form.amount),
+      amountInWords,
       poId: poId || null,
       steps,
       ccUsers,
     })
   }
 
-  const otherUsers = users.filter(u => u.id !== user?.id && u.id !== budgetHolderId && u.id !== financeId)
+  const selectedApprovers = [procurementOfficerId, budgetHolderId, financeId].filter(Boolean)
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-secondary-900 flex items-center gap-2">
-          <CreditCard size={24} className="text-primary-600" />
+          <CreditCard size={22} className="text-primary-600" />
           New Payment Requisition
         </h1>
-        {poData && (
-          <p className="text-sm text-secondary-500 mt-1">
-            Linked to: {poData.document_number}{poData.supplier_name ? ` · ${poData.supplier_name}` : ''}
-          </p>
-        )}
+        <p className="text-sm text-secondary-500 mt-1">Complete all sections before submitting for approval</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {/* Payee Information */}
-        <div className="card p-6 space-y-4">
-          <h2 className="font-semibold text-secondary-900">Payee Information</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="label">Payee / Vendor Name *</label>
-              <input className="input" required value={form.payeeName} onChange={e => setField('payeeName', e.target.value)} placeholder="Full name or company name" />
+        {/* Payment Details */}
+        <div className="card p-5 space-y-4">
+          <h2 className="font-semibold text-secondary-800 text-sm uppercase tracking-wide">Payment Details</h2>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="label">Payee Name *</label>
+              <input className="input" placeholder="Full name of person or organisation to be paid" value={form.payeeName} onChange={e => set('payeeName', e.target.value)} />
             </div>
+
+            <div className="col-span-2">
+              <label className="label">Paying Office *</label>
+              <input className="input" placeholder="e.g. ADESO Mogadishu Office, ADESO Nairobi HQ" value={form.payingOffice} onChange={e => set('payingOffice', e.target.value)} />
+            </div>
+
             <div>
               <label className="label">Bank Name</label>
-              <input className="input" value={form.payeeBank} onChange={e => setField('payeeBank', e.target.value)} placeholder="e.g. Equity Bank" />
+              <input className="input" placeholder="e.g. Equity Bank Kenya" value={form.payeeBank} onChange={e => set('payeeBank', e.target.value)} />
             </div>
+
             <div>
-              <label className="label">Account No. / Reference</label>
-              <input className="input" value={form.payeeAccount} onChange={e => setField('payeeAccount', e.target.value)} placeholder="Account or M-Pesa number" />
+              <label className="label">Account Number</label>
+              <input className="input" placeholder="Bank account or M-Pesa number" value={form.payeeAccount} onChange={e => set('payeeAccount', e.target.value)} />
             </div>
           </div>
         </div>
 
-        {/* Payment Details */}
-        <div className="card p-6 space-y-4">
-          <h2 className="font-semibold text-secondary-900">Payment Details</h2>
-          <div className="grid md:grid-cols-2 gap-4">
+        {/* Amount */}
+        <div className="card p-5 space-y-4">
+          <h2 className="font-semibold text-secondary-800 text-sm uppercase tracking-wide">Amount & Payment Mode</h2>
+
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="label">Currency *</label>
-              <select className="input" value={form.currency} onChange={e => setField('currency', e.target.value)}>
-                {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+              <select className="input" value={form.currency} onChange={e => set('currency', e.target.value)}>
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div>
+
+            <div className="col-span-2">
               <label className="label">Amount *</label>
-              <input type="number" min="0" step="0.01" className="input" required value={form.amount} onChange={e => setField('amount', e.target.value)} placeholder="0.00" />
-            </div>
-            <div>
-              <label className="label">Payment Method *</label>
-              <select className="input" value={form.paymentMethod} onChange={e => setField('paymentMethod', e.target.value)}>
-                {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Budget Line</label>
-              <input className="input" value={form.budgetLine} onChange={e => setField('budgetLine', e.target.value)} placeholder="e.g. Admin-2024-Q2" />
-            </div>
-            <div className="md:col-span-2">
-              <label className="label">Purpose of Payment *</label>
-              <textarea className="input resize-none" rows={3} required value={form.paymentPurpose} onChange={e => setField('paymentPurpose', e.target.value)} placeholder="Describe what this payment is for…" />
+              <input className="input" type="number" min="0" step="0.01" placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} />
             </div>
           </div>
-          {form.amount > 0 && (
-            <div className="bg-primary-50 border border-primary-100 rounded-lg px-4 py-3 flex items-center justify-between">
-              <span className="text-sm text-secondary-500">Total amount to be paid</span>
-              <span className="text-xl font-bold text-primary-700">
-                {form.currency} {Number(form.amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
-              </span>
+
+          {amountInWords && (
+            <div className="bg-secondary-50 rounded-lg px-4 py-3">
+              <p className="text-xs text-secondary-400 uppercase tracking-wide font-medium mb-0.5">Amount in Words</p>
+              <p className="text-sm text-secondary-800 font-medium">{amountInWords}</p>
             </div>
           )}
+
+          <div>
+            <label className="label">Mode of Payment *</label>
+            <select className="input" value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}>
+              {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="label">Reason for Payment *</label>
+            <textarea className="input" rows={3} placeholder="Describe what this payment is for in detail…" value={form.paymentPurpose} onChange={e => set('paymentPurpose', e.target.value)} />
+          </div>
         </div>
 
-        {/* Approval Chain — fixed 3-step */}
-        <div className="card p-6 space-y-4">
-          <div>
-            <h2 className="font-semibold text-secondary-900">Approval Chain</h2>
-            <p className="text-xs text-secondary-500 mt-1">
-              Payment requisitions always follow the 3-step authorisation chain: Requestor → Budget Holder → Finance.
-            </p>
-          </div>
+        {/* Budget & Project Coding */}
+        <div className="card p-5 space-y-4">
+          <h2 className="font-semibold text-secondary-800 text-sm uppercase tracking-wide">Budget & Project Coding</h2>
 
-          {/* Step 1: Requestor — read-only */}
-          <div className="border border-secondary-200 rounded-lg p-4 bg-secondary-50 opacity-90">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-secondary-400 uppercase tracking-wide">Step 1</span>
-                <span className="text-xs bg-secondary-200 text-secondary-700 rounded-full px-2.5 py-0.5 font-medium">Requestor</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-secondary-400">
-                <Lock size={10} />
-                <span>Auto-assigned</span>
-              </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="label">Budget Line</label>
+              <input className="input" placeholder="e.g. Programme Supplies" value={form.budgetLine} onChange={e => set('budgetLine', e.target.value)} />
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 text-sm font-bold flex-shrink-0">
-                {user?.first_name?.[0]}{user?.last_name?.[0]}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-secondary-900">{user?.first_name} {user?.last_name}</p>
-                {user?.job_title && <p className="text-xs text-secondary-400">{user.job_title}</p>}
-              </div>
-              <span className="ml-auto text-xs text-primary-600 font-medium">You</span>
+            <div>
+              <label className="label">Budget Code</label>
+              <input className="input" placeholder="e.g. ADM-2024-001" value={form.budgetCode} onChange={e => set('budgetCode', e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Project Code</label>
+              <input className="input" placeholder="e.g. PROJ-KE-001" value={form.projectCode} onChange={e => set('projectCode', e.target.value)} />
             </div>
           </div>
+        </div>
 
-          {/* Step 2: Budget Holder */}
+        {/* Approval Chain */}
+        <div className="card p-5 space-y-4">
+          <h2 className="font-semibold text-secondary-800 text-sm uppercase tracking-wide">Approval Chain</h2>
+          <p className="text-xs text-secondary-400">Select the approvers for this payment requisition. Approvals will proceed in order.</p>
+
+          {/* Step 1 */}
+          <div className="border border-secondary-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-secondary-400 uppercase tracking-wide">Step 1</span>
+              <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2.5 py-0.5 font-medium">Procurement Officer</span>
+            </div>
+            <div>
+              <label className="label text-xs">Select Procurement Officer *</label>
+              <select className="input text-sm" value={procurementOfficerId} onChange={e => setProcurementOfficerId(e.target.value)}>
+                <option value="">Select procurement officer…</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.first_name} {u.last_name}{u.job_title ? ` — ${u.job_title}` : ''}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Step 2 */}
           <div className="border border-secondary-200 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-secondary-400 uppercase tracking-wide">Step 2</span>
               <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2.5 py-0.5 font-medium">Budget Holder</span>
             </div>
             <div>
-              <label className="label text-xs">Select approver *</label>
+              <label className="label text-xs">Select Budget Holder *</label>
               <select className="input text-sm" value={budgetHolderId} onChange={e => setBudgetHolderId(e.target.value)}>
                 <option value="">Select budget holder…</option>
-                {users.filter(u => u.id !== user?.id).map(u => (
+                {users.filter(u => u.id !== procurementOfficerId).map(u => (
                   <option key={u.id} value={u.id}>{u.first_name} {u.last_name}{u.job_title ? ` — ${u.job_title}` : ''}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Step 3: Finance */}
+          {/* Step 3 */}
           <div className="border border-secondary-200 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-secondary-400 uppercase tracking-wide">Step 3</span>
-              <span className="text-xs bg-green-100 text-green-700 rounded-full px-2.5 py-0.5 font-medium">Finance</span>
+              <span className="text-xs bg-green-100 text-green-700 rounded-full px-2.5 py-0.5 font-medium">Finance — Final Signature</span>
             </div>
             <div>
-              <label className="label text-xs">Select approver *</label>
+              <label className="label text-xs">Select Finance Officer *</label>
               <select className="input text-sm" value={financeId} onChange={e => setFinanceId(e.target.value)}>
                 <option value="">Select finance officer…</option>
-                {users.filter(u => u.id !== user?.id).map(u => (
+                {users.filter(u => u.id !== procurementOfficerId && u.id !== budgetHolderId).map(u => (
                   <option key={u.id} value={u.id}>{u.first_name} {u.last_name}{u.job_title ? ` — ${u.job_title}` : ''}</option>
                 ))}
               </select>
             </div>
           </div>
+        </div>
 
-          {/* CC Finance Team */}
-          {otherUsers.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Users size={14} className="text-secondary-400" />
-                <label className="label mb-0 text-sm">CC Finance Team <span className="text-secondary-400 font-normal">(optional)</span></label>
-              </div>
-              <p className="text-xs text-secondary-400">These users receive email notifications but are not required to approve.</p>
-              <div className="border border-secondary-200 rounded-lg divide-y divide-secondary-100 max-h-48 overflow-y-auto">
-                {otherUsers.map(u => (
-                  <label key={u.id} className="flex items-center gap-3 px-4 py-3 hover:bg-secondary-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="rounded border-secondary-300 text-primary-600 flex-shrink-0"
-                      checked={ccUsers.includes(u.id)}
-                      onChange={() => toggleCc(u.id)}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm text-secondary-900">{u.first_name} {u.last_name}</p>
-                      {u.job_title && <p className="text-xs text-secondary-400 truncate">{u.job_title}</p>}
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+        {/* CC */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Users size={15} className="text-secondary-400" />
+            <h2 className="font-semibold text-secondary-800 text-sm uppercase tracking-wide">CC — For Information Only</h2>
+          </div>
+          <p className="text-xs text-secondary-400">These people receive email notifications but are not required to approve.</p>
+
+          <div className="border border-secondary-200 rounded-lg divide-y divide-secondary-100 max-h-52 overflow-y-auto">
+            {users.filter(u => !selectedApprovers.includes(u.id)).map(u => (
+              <label key={u.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded border-secondary-300 text-primary-600 flex-shrink-0"
+                  checked={ccUsers.includes(u.id)}
+                  onChange={() => toggleCc(u.id)}
+                />
+                <div className="min-w-0">
+                  <p className="text-sm text-secondary-900">{u.first_name} {u.last_name}</p>
+                  {u.job_title && <p className="text-xs text-secondary-400 truncate">{u.job_title}</p>}
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="flex gap-3 justify-end pb-6">

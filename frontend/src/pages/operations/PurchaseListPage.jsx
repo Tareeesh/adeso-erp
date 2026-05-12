@@ -20,7 +20,7 @@ export default function PurchaseListPage() {
             {prs.map(pr => (
               <Link key={pr.id} to={`/documents/${pr.document_id}`} className="flex items-center justify-between p-3 hover:bg-secondary-50">
                 <div><p className="text-sm font-medium">{pr.title}</p><p className="text-xs text-secondary-500">{pr.document_number}</p></div>
-                <span className={`badge-${pr.status}`}>{pr.status}</span>
+                <span className={`badge-${pr.status === 'in_progress' ? 'progress' : pr.status}`}>{pr.status?.replace(/_/g, ' ')}</span>
               </Link>
             ))}
             {prs.length === 0 && <p className="p-4 text-sm text-secondary-400 text-center">No requisitions</p>}

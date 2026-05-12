@@ -29,6 +29,9 @@ const signExtRoutes = require('./routes/signExt')
 const purchaseRoutes = require('./routes/operations/purchase')
 const travelRoutes = require('./routes/operations/travel')
 const cabRoutes = require('./routes/operations/cab')
+const bidAnalysisRoutes = require('./routes/operations/bidAnalysis')
+const deliveryRoutes = require('./routes/operations/delivery')
+const dossierRoutes = require('./routes/operations/dossier')
 
 // HR
 const recruitmentRoutes = require('./routes/hr/recruitment')
@@ -90,6 +93,9 @@ app.use('/api/sign-ext', signExtRoutes)
 app.use('/api/operations/purchase', purchaseRoutes)
 app.use('/api/operations/travel', travelRoutes)
 app.use('/api/operations/cab', cabRoutes)
+app.use('/api/operations/bid-analysis', bidAnalysisRoutes)
+app.use('/api/operations/delivery', deliveryRoutes)
+app.use('/api/operations/dossier', dossierRoutes)
 
 // HR
 app.use('/api/hr/recruitment', recruitmentRoutes)
@@ -104,6 +110,9 @@ app.use('/api/assets', assetRoutes)
 // Inventory
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/inventory/warehouses', warehouseRoutes)
+
+const pdfRoutes = require('./routes/pdf')
+app.use('/api/pdf', pdfRoutes)
 
 app.use(errorHandler)
 

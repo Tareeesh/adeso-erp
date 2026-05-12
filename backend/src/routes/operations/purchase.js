@@ -275,7 +275,9 @@ router.get('/orders/:orderId', ...guard, asyncHandler(async (req, res) => {
 }))
 
 router.post('/payments', ...guard, asyncHandler(async (req, res) => {
-  const { poId, payeeName, payeeAccount, payeeBank, currency, amount, paymentMethod, paymentPurpose, budgetLine, steps, ccUsers } = req.body
+  const { poId, payeeName, payeeAccount, payeeBank, currency, amount, paymentMethod,
+          paymentPurpose, budgetLine, budgetCode, projectCode, payingOffice, amountInWords,
+          steps, ccUsers } = req.body
 
   let poReference = null
   if (poId) {
@@ -300,9 +302,9 @@ router.post('/payments', ...guard, asyncHandler(async (req, res) => {
     })
 
     const { rows: [pmtReq] } = await client.query(
-      `INSERT INTO payment_requisitions (document_id, po_id, company_id, created_by, payee_name, payee_account, payee_bank, currency, amount, payment_method, payment_purpose, budget_line)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [doc.id, poId || null, req.user.companyId, req.user.id, payeeName, payeeAccount, payeeBank, currency || 'KES', amount, paymentMethod, paymentPurpose, budgetLine]
+      `INSERT INTO payment_requisitions (document_id, po_id, company_id, created_by, payee_name, payee_account, payee_bank, currency, amount, payment_method, payment_purpose, budget_line, budget_code, project_code, paying_office, amount_in_words)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [doc.id, poId || null, req.user.companyId, req.user.id, payeeName, payeeAccount, payeeBank, currency || 'KES', amount, paymentMethod, paymentPurpose, budgetLine, budgetCode || null, projectCode || null, payingOffice || null, amountInWords || null]
     )
 
     return { document: doc, paymentRequisition: pmtReq }

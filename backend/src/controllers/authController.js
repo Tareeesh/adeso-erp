@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken')
 const { v4: uuidv4 } = require('uuid')
 const { query, transaction } = require('../config/database')
 const { sendEmail } = require('../config/email')
-const { uploadFile } = require('../config/storage')
+const { uploadFile, getFileUrl } = require('../config/storage')
 const { auditLog } = require('../middleware/audit')
 
 const generateTokens = (userId, companyId) => {
@@ -149,7 +149,12 @@ exports.getMe = async (req, res) => {
     [req.user.id, req.user.companyId]
   )
 
-  res.json({ user: rows[0], companies, accessibleModules: modules })
+  const user = rows[0]
+  if (user && user.signature_url && user.signature_type !== 'typed') {
+    try { user.signature_url = await getFileUrl(user.signature_url) } catch {}
+  }
+
+  res.json({ user, companies, accessibleModules: modules })
 }
 
 exports.updateProfile = async (req, res) => {
@@ -179,7 +184,12 @@ exports.saveSignature = async (req, res) => {
     'UPDATE users SET signature_url=$1, signature_type=$2, updated_at=NOW() WHERE id=$3',
     [signatureUrl, signatureType, req.user.id]
   )
-  res.json({ signatureUrl, signatureType })
+
+  let displayUrl = signatureUrl
+  if (signatureType !== 'typed') {
+    try { displayUrl = await getFileUrl(signatureUrl) } catch {}
+  }
+  res.json({ signatureUrl: displayUrl, signatureType })
 }
 
 exports.changePassword = async (req, res) => {

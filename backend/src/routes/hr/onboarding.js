@@ -120,7 +120,6 @@ router.put('/:id/tasks/:taskId', ...guard, asyncHandler(async (req, res) => {
 
 // Induction
 router.post('/:id/induction', ...guard, asyncHandler(async (req, res) => {
-  const { onb } = await query('SELECT employee_id FROM onboarding_processes WHERE id=$1', [req.params.id])
   const { rows: [onboarding] } = await query('SELECT employee_id FROM onboarding_processes WHERE id=$1', [req.params.id])
 
   const { rows: [checklist] } = await query(

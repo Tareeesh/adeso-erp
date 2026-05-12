@@ -23,6 +23,14 @@ import PurchaseOrderListPage from './pages/operations/PurchaseOrderListPage'
 import PurchaseEditPage from './pages/operations/PurchaseEditPage'
 import PaymentListPage from './pages/operations/PaymentListPage'
 import PaymentCreatePage from './pages/operations/PaymentCreatePage'
+import PaymentDetailPage from './pages/operations/PaymentDetailPage'
+import BidAnalysisListPage from './pages/operations/BidAnalysisListPage'
+import BidAnalysisDetailPage from './pages/operations/BidAnalysisDetailPage'
+import DeliveryListPage from './pages/operations/DeliveryListPage'
+import DeliveryCreatePage from './pages/operations/DeliveryCreatePage'
+import DossierListPage from './pages/operations/DossierListPage'
+import DossierClosurePage from './pages/operations/DossierClosurePage'
+import ProfilePage from './pages/profile/ProfilePage'
 import ExternalSignPage from './pages/sign/ExternalSignPage'
 import SignDocListPage from './pages/signing/SignDocListPage'
 import SignDocPreparePage from './pages/signing/SignDocPreparePage'
@@ -94,6 +102,14 @@ export default function App() {
               <Route path="orders" element={<ProtectedRoute module="operations"><PurchaseOrderListPage /></ProtectedRoute>} />
               <Route path="payments" element={<ProtectedRoute module="operations"><PaymentListPage /></ProtectedRoute>} />
               <Route path="payments/new" element={<ProtectedRoute module="operations"><PaymentCreatePage /></ProtectedRoute>} />
+              <Route path="payments/:id" element={<ProtectedRoute module="operations"><PaymentDetailPage /></ProtectedRoute>} />
+              <Route path="bid-analysis" element={<ProtectedRoute module="operations"><BidAnalysisListPage /></ProtectedRoute>} />
+              <Route path="bid-analysis/:rfqId" element={<ProtectedRoute module="operations"><BidAnalysisDetailPage /></ProtectedRoute>} />
+              <Route path="delivery" element={<ProtectedRoute module="operations"><DeliveryListPage /></ProtectedRoute>} />
+              <Route path="delivery/new" element={<ProtectedRoute module="operations"><DeliveryCreatePage /></ProtectedRoute>} />
+              <Route path="delivery/po/:poId" element={<ProtectedRoute module="operations"><DeliveryCreatePage /></ProtectedRoute>} />
+              <Route path="dossier" element={<ProtectedRoute module="operations"><DossierListPage /></ProtectedRoute>} />
+              <Route path="dossier/:poId" element={<ProtectedRoute module="operations"><DossierClosurePage /></ProtectedRoute>} />
             </Route>
 
             <Route path="signing">
@@ -118,6 +134,8 @@ export default function App() {
               <Route path="store-requests" element={<ProtectedRoute module="inventory"><StoreRequestsPage /></ProtectedRoute>} />
               <Route path="warehouses" element={<ProtectedRoute module="inventory"><WarehousesPage /></ProtectedRoute>} />
             </Route>
+
+            <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
             <Route path="admin">
               <Route index element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
